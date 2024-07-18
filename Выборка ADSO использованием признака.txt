@@ -1,0 +1,22 @@
+select distinct 
+OBJNM,DESCRIPTION from ( 
+ select 
+
+OBJNM ,
+
+DESCRIPTION,
+DIRECT_UPDATE
+
+
+
+from "SAPBAP"."RSOOBJXREF" t1 
+
+left outer join "SAPBAP"."RSOADSOT" t2 on t1.OBJNM = t2.ADSONM  and t1.OBJVERS = t2.OBJVERS
+left outer join "SAPBAP"."RSOADSO" t3 on  t3.OBJVERS = t2.OBJVERS and t1.OBJNM = t3.ADSONM
+--left outer join "SAPBAP"."RSTRAN" t4 on t4.OBJVERS = t2.OBJVERS and TARGETNAME = t1.OBJNM 
+where 1=1 
+      AND t1.OBJVERS = 'A' AND TLOGO  = 'ADSO' and OBJNM_DEP = 'ZDACH041' AND "OBJNM" like '%DPA%'
+      AND COLNAME = ''
+      ORDER BY DIRECT_UPDATE
+      
+)
