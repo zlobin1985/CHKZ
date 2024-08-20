@@ -1,0 +1,137 @@
+CLASS ZCL_BW_AMDP_ZSDDPA87_TOTALCOST DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+    INTERFACES IF_AMDP_MARKER_HDB.
+    TYPES:
+      BEGIN OF TY_OUT,
+      OPERTYPE      TYPE C LENGTH 30,
+      ZSDDLVPOS      TYPE /BIC/OIZSDDLVPOS,
+      ZMATBATCH      TYPE /BIC/OIZMATBATCH,
+      ZDACH036      TYPE /BIC/OIZDACH036,
+      ZSD_TKNUM     TYPE /BIC/OIZSD_TKNUM,
+      DTSHP_BACT     TYPE /BI0/OIDTSHP_BACT,
+**   ZSD_TKNUM      TYPE /BIC/OIZSD_TKNUM,
+      SHIP_POINT        TYPE /BI0/OISHIP_TO,
+      SOLD_TO_SHIP     TYPE /BI0/OISHIP_TO,
+
+      LEVEL TYPE I,
+
+      end of TY_OUT,
+
+
+
+     LT_IN_COST  TYPE STANDARD TABLE OF TY_OUT,
+     LT_OUT_COST TYPE STANDARD TABLE OF TY_OUT.
+
+
+     CLASS-METHODS  GET_TOTAL_COST_MOOVE
+      IMPORTING
+                VALUE(LT_IN)         TYPE LT_IN_COST
+                VALUE(LV_COUNT)      TYPE I
+      EXPORTING VALUE(LT_OUT)        TYPE LT_IN_COST
+                VALUE(LT_OUT_TEMP)        TYPE LT_IN_COST
+      RAISING   CX_AMDP_ERROR.
+
+
+      CLASS-METHODS  GET_TOTAL_COST
+      IMPORTING
+                VALUE(LT_IN)         TYPE LT_IN_COST
+      EXPORTING VALUE(LT_OUT)        TYPE LT_IN_COST
+
+      RAISING   CX_AMDP_ERROR.
+
+
+ENDCLASS.
+
+
+
+CLASS ZCL_BW_AMDP_ZSDDPA87_TOTALCOST IMPLEMENTATION.
+
+  METHOD GET_TOTAL_COST_MOOVE  BY DATABASE PROCEDURE
+                                    FOR HDB
+                                    LANGUAGE SQLSCRIPT
+                                    OPTIONS  READ-ONLY.
+
+     lt_connect =
+
+    select t1.ZSDDLVPOS,t2.ZSDDLVPOS as ZSDDLVPOS_t2 ,t1.ZMATBATCH,t1.DTSHP_BACT,
+    t1.ZDACH036,t1.ZSD_TKNUM,
+    t2.DTSHP_BACT AS T2_DTSHP_BACT,
+    t1.SHIP_POINT AS T1_SHIP_POINT,
+    t1.SOLD_TO_SHIP AS T1_SOLD_TO_SHIP,
+    t2.SHIP_POINT AS T2_SHIP_POINT,
+    t2.SOLD_TO_SHIP AS T2_SOLD_TO_SHIP,
+    ifnull(t2.SOLD_TO_SHIP,t1.SHIP_POINT) as  SHIP_POINT,
+    ifnull(t2.SHIP_POINT,t1.SOLD_TO_SHIP) as  SOLD_TO_SHIP,
+    ifnull(t2.SOLD_TO_SHIP,'X') as  FLAG,
+    case   ifnull(t2.LEVEL,0 )
+    when 0 THEN LV_COUNT
+    ELSE t2.LEVEL
+    END  as  LEVEL
+
+    from :lt_in t1
+
+        left outer join :lt_in t2 on
+       t1.ZMATBATCH = t2.ZMATBATCH  AND
+       t1.DTSHP_BACT < t2.DTSHP_BACT AND
+       t1.SOLD_TO_SHIP = t2.SHIP_POINT AND
+
+       t1.ZDACH036 = t2.ZDACH036 ;
+
+
+    LT_OUT = select * from :LT_IN;
+
+
+    LT_OUT_TEMP  =  select * from :LT_IN;
+
+ENDMETHOD.
+
+  METHOD GET_TOTAL_COST BY DATABASE PROCEDURE
+                                    FOR HDB
+                                    LANGUAGE SQLSCRIPT
+                                    OPTIONS  READ-ONLY USING ZCL_BW_AMDP_ZSDDPA87_TOTALCOST=>GET_TOTAL_COST_MOOVE.
+    DECLARE I_STOP INTEGER;
+    DECLARE I_COUNT INTEGER;
+   I_STOP = 3;
+
+   lt_in  = select
+                OPERTYPE,
+                ZSDDLVPOS,
+                ZMATBATCH,
+                ZDACH036,
+                ZSD_TKNUM,
+                DTSHP_BACT,
+ --               ZSD_TKNUM,
+                SHIP_POINT,
+                SOLD_TO_SHIP,
+                0 as LEVEL
+            /*    ,
+                DELIV_NUM_COUNT,
+                ZSD_TRFPC,
+                ZSDDLKGAG,
+                1 AS LEVEL,
+                ZSDDLVPOS AS ZSDDLVPOS_HEAD,
+                1 as RECORD,
+                '1' AS SQL__PROCEDURE__SOURCE__RECORD
+                */
+                 from "_SYS_BIC"."ZCHERKIZOVO.Z_SD.REUSE/ZCV_SD_REUSE_ZSDDPA87"
+                where ZMATBATCH = '0000000010306709053040728010' AND OPERTYPE = 'Перемещение' ;
+
+   I_COUNT = 1;
+   WHILE  I_STOP > 0
+   DO
+   call "ZCL_BW_AMDP_ZSDDPA87_TOTALCOST=>GET_TOTAL_COST_MOOVE"
+   ( lt_out=>lt_out,lv_count=>I_COUNT,lt_out_temp=>lt_out_temp,lt_in=>:lt_in);
+   select count( * ) into I_COUNT from :lt_out_temp ;
+   I_STOP = I_STOP - 1;
+   END WHILE;
+
+    LT_OUT = select * from :LT_IN;
+
+
+ENDMETHOD.
+
+ENDCLASS.
