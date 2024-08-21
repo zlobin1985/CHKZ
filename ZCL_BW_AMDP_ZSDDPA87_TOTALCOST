@@ -8,38 +8,64 @@ CLASS ZCL_BW_AMDP_ZSDDPA87_TOTALCOST DEFINITION
     TYPES:
       BEGIN OF TY_OUT,
       OPERTYPE      TYPE C LENGTH 30,
-      ZSDDLVPOS      TYPE /BIC/OIZSDDLVPOS,
+      ZSDDLVPOS_SALE      TYPE /BIC/OIZSDDLVPOS,
+      ZSDDLVPOS_MOOVE      TYPE /BIC/OIZSDDLVPOS,
       ZMATBATCH      TYPE /BIC/OIZMATBATCH,
-      ZDACH036      TYPE /BIC/OIZDACH036,
-      ZSD_TKNUM     TYPE /BIC/OIZSD_TKNUM,
       DTSHP_BACT     TYPE /BI0/OIDTSHP_BACT,
 **   ZSD_TKNUM      TYPE /BIC/OIZSD_TKNUM,
       SHIP_POINT        TYPE /BI0/OISHIP_TO,
       SOLD_TO_SHIP     TYPE /BI0/OISHIP_TO,
 
       LEVEL TYPE I,
+      DELIV_NUM_COUNT TYPE I ,
+      ZSD_TRFPC TYPE  /BIC/OIZSD_TRFPC,
+      ZSDDLKGAG TYPE  /BIC/OIZSDDLKGAG,
 
       end of TY_OUT,
 
 
 
+      BEGIN OF TY_OUT_2,
+      OPERTYPE      TYPE C LENGTH 30,
+      ZSDDLVPOS_SALE      TYPE /BIC/OIZSDDLVPOS,
+      ZSDDLVPOS_MOOVE      TYPE /BIC/OIZSDDLVPOS,
+      ZMATBATCH      TYPE /BIC/OIZMATBATCH,
+      DTSHP_BACT     TYPE /BI0/OIDTSHP_BACT,
+**   ZSD_TKNUM      TYPE /BIC/OIZSD_TKNUM,
+      SHIP_POINT        TYPE /BI0/OISHIP_TO,
+      SOLD_TO_SHIP     TYPE /BI0/OISHIP_TO,
+
+      LEVEL TYPE I,
+      DELIV_NUM_COUNT TYPE I ,
+      ZSD_TRFPC TYPE  /BIC/OIZSD_TRFPC,
+      ZSDDLKGAG TYPE  /BIC/OIZSDDLKGAG,
+
+      end of TY_OUT_2,
+
+
      LT_IN_COST  TYPE STANDARD TABLE OF TY_OUT,
      LT_OUT_COST TYPE STANDARD TABLE OF TY_OUT.
+**   --  LT_IN_COST_2  TYPE STANDARD TABLE OF TY_OUT_2.
 
-
+*** циклический вызов
+*  --
+* --                 VALUE(LT_OUT_TEMP)        TYPE LT_IN_COST
      CLASS-METHODS  GET_TOTAL_COST_MOOVE
       IMPORTING
-                VALUE(LT_IN)         TYPE LT_IN_COST
+                VALUE(LT_IN_REC)         TYPE LT_IN_COST
+                VALUE(LT_IN_MOOVES)      TYPE LT_IN_COST
+
                 VALUE(LV_COUNT)      TYPE I
-      EXPORTING VALUE(LT_OUT)        TYPE LT_IN_COST
+      EXPORTING VALUE(LT_OUT_REC)        TYPE LT_IN_COST
                 VALUE(LT_OUT_TEMP)        TYPE LT_IN_COST
+
       RAISING   CX_AMDP_ERROR.
 
 
       CLASS-METHODS  GET_TOTAL_COST
       IMPORTING
-                VALUE(LT_IN)         TYPE LT_IN_COST
-      EXPORTING VALUE(LT_OUT)        TYPE LT_IN_COST
+                VALUE(LT_IN_TOTAL)         TYPE LT_IN_COST
+      EXPORTING VALUE(LT_OUT_TOTAL)        TYPE LT_IN_COST
 
       RAISING   CX_AMDP_ERROR.
 
@@ -57,35 +83,45 @@ CLASS ZCL_BW_AMDP_ZSDDPA87_TOTALCOST IMPLEMENTATION.
 
      lt_connect =
 
-    select t1.ZSDDLVPOS,t2.ZSDDLVPOS as ZSDDLVPOS_t2 ,t1.ZMATBATCH,t1.DTSHP_BACT,
-    t1.ZDACH036,t1.ZSD_TKNUM,
-    t2.DTSHP_BACT AS T2_DTSHP_BACT,
-    t1.SHIP_POINT AS T1_SHIP_POINT,
-    t1.SOLD_TO_SHIP AS T1_SOLD_TO_SHIP,
-    t2.SHIP_POINT AS T2_SHIP_POINT,
-    t2.SOLD_TO_SHIP AS T2_SOLD_TO_SHIP,
-    ifnull(t2.SOLD_TO_SHIP,t1.SHIP_POINT) as  SHIP_POINT,
-    ifnull(t2.SHIP_POINT,t1.SOLD_TO_SHIP) as  SOLD_TO_SHIP,
-    ifnull(t2.SOLD_TO_SHIP,'X') as  FLAG,
-    case   ifnull(t2.LEVEL,0 )
-    when 0 THEN LV_COUNT
-    ELSE t2.LEVEL
-    END  as  LEVEL
+    select
+          t1.OPERTYPE,
+           t1.ZSDDLVPOS_SALE,
+           ifnull(t2.ZSDDLVPOS_MOOVE,t1.ZSDDLVPOS_MOOVE) as ZSDDLVPOS_MOOVE,
+           t1.ZMATBATCH,
+           t1.DTSHP_BACT,
+           t1.SHIP_POINT AS T1_SHIP_POINT,
+           t1.SOLD_TO_SHIP AS T1_SOLD_TO_SHIP,
+           t2.SHIP_POINT AS T2_SHIP_POINT,
+           t2.SOLD_TO_SHIP AS T2_SOLD_TO_SHIP,
+           ifnull(t2.SHIP_POINT,t1.SHIP_POINT) as  SHIP_POINT,
+           ifnull(t2.SOLD_TO_SHIP,t1.SOLD_TO_SHIP) as  SOLD_TO_SHIP,
+           ifnull(t2.SOLD_TO_SHIP,'X') as  FLAG,
+            case   ifnull(t2.LEVEL,0 )
+            when 0 THEN LV_COUNT-1
+            ELSE LV_COUNT
+            END  as  LEVEL,
+                ifnull(t2.DELIV_NUM_COUNT,t1.DELIV_NUM_COUNT) as DELIV_NUM_COUNT,
+                ifnull(t2.ZSD_TRFPC,t1.ZSD_TRFPC) as ZSD_TRFPC,
+                ifnull(t2.ZSDDLKGAG,t1.ZSDDLKGAG) as ZSDDLKGAG
 
-    from :lt_in t1
+    from :LT_IN_REC t1
 
-        left outer join :lt_in t2 on
+        left outer join :LT_IN_MOOVES t2 on
        t1.ZMATBATCH = t2.ZMATBATCH  AND
-       t1.DTSHP_BACT < t2.DTSHP_BACT AND
-       t1.SOLD_TO_SHIP = t2.SHIP_POINT AND
-
-       t1.ZDACH036 = t2.ZDACH036 ;
-
-
-    LT_OUT = select * from :LT_IN;
+       t1.DTSHP_BACT >= t2.DTSHP_BACT AND
+       t2.SOLD_TO_SHIP = t1.SHIP_POINT
+ ;
 
 
-    LT_OUT_TEMP  =  select * from :LT_IN;
+    LT_OUT_REC = select OPERTYPE,ZSDDLVPOS_SALE,
+                        ZSDDLVPOS_MOOVE,
+                        ZMATBATCH,
+                        DTSHP_BACT,
+                        SHIP_POINT,SOLD_TO_SHIP,LEVEL,DELIV_NUM_COUNT,ZSD_TRFPC,ZSDDLKGAG
+                           from :lt_connect;
+
+
+    LT_OUT_TEMP  =  select * from :LT_IN_MOOVES;
 
 ENDMETHOD.
 
@@ -95,19 +131,45 @@ ENDMETHOD.
                                     OPTIONS  READ-ONLY USING ZCL_BW_AMDP_ZSDDPA87_TOTALCOST=>GET_TOTAL_COST_MOOVE.
     DECLARE I_STOP INTEGER;
     DECLARE I_COUNT INTEGER;
-   I_STOP = 3;
 
-   lt_in  = select
+***** иттерационная таблица.  Для иттерации 0 - это только продажи
+   lt_in_total_sales  =
+            select
                 OPERTYPE,
-                ZSDDLVPOS,
+                ZSDDLVPOS AS ZSDDLVPOS_SALE,
+                ZSDDLVPOS AS ZSDDLVPOS_MOOVE,
                 ZMATBATCH,
-                ZDACH036,
-                ZSD_TKNUM,
                 DTSHP_BACT,
- --               ZSD_TKNUM,
                 SHIP_POINT,
                 SOLD_TO_SHIP,
-                0 as LEVEL
+                1 as LEVEL,
+                DELIV_NUM_COUNT,
+                ZSD_TRFPC,
+                ZSDDLKGAG
+                /*    ,,
+                1 AS LEVEL,
+                ZSDDLVPOS AS ZSDDLVPOS_HEAD,
+                1 as RECORD,
+                '1' AS SQL__PROCEDURE__SOURCE__RECORD
+                */
+                 from "_SYS_BIC"."ZCHERKIZOVO.Z_SD.REUSE/ZCV_SD_REUSE_ZSDDPA87"
+                where ZMATBATCH = '0000000010306709053040728010' AND OPERTYPE = 'Продажа'
+              AND ZSDDLVPOS = '0814569344000260';
+
+
+      lt_in_total_mooves =
+            select
+                OPERTYPE,
+                ZSDDLVPOS AS ZSDDLVPOS_SALE,
+                ZSDDLVPOS AS ZSDDLVPOS_MOOVE,
+                ZMATBATCH,
+                DTSHP_BACT,
+                SHIP_POINT,
+                SOLD_TO_SHIP,
+                1 as LEVEL,
+                DELIV_NUM_COUNT,
+                ZSD_TRFPC,
+                ZSDDLKGAG
             /*    ,
                 DELIV_NUM_COUNT,
                 ZSD_TRFPC,
@@ -118,18 +180,61 @@ ENDMETHOD.
                 '1' AS SQL__PROCEDURE__SOURCE__RECORD
                 */
                  from "_SYS_BIC"."ZCHERKIZOVO.Z_SD.REUSE/ZCV_SD_REUSE_ZSDDPA87"
-                where ZMATBATCH = '0000000010306709053040728010' AND OPERTYPE = 'Перемещение' ;
+                where ZMATBATCH = '0000000010306709053040728010' AND OPERTYPE = 'Перемещение';
+               -- ;
+
 
    I_COUNT = 1;
+   I_STOP = 1;
+*** вызываем цикл . Передаем на вход  переменную таблицу
+SELECT count( * ) into I_STOP  from :lt_in_total_sales;
+
    WHILE  I_STOP > 0
    DO
    call "ZCL_BW_AMDP_ZSDDPA87_TOTALCOST=>GET_TOTAL_COST_MOOVE"
-   ( lt_out=>lt_out,lv_count=>I_COUNT,lt_out_temp=>lt_out_temp,lt_in=>:lt_in);
-   select count( * ) into I_COUNT from :lt_out_temp ;
-   I_STOP = I_STOP - 1;
+   (
+*** IMPORTING
+     LT_IN_REC=>:lt_in_total_sales,
+     LT_IN_MOOVES=>:lt_in_total_mooves,
+     lv_count=>I_COUNT,
+**** exporting
+     LT_OUT_REC=>lt_sale_anl,
+     LT_OUT_TEMP=>lt_temp
+
+    );
+
+
+   lt_in_total_sales = select * from :lt_sale_anl WHERE LEVEL = I_COUNT ;
+   LT_OUT_TOTAL_TEMP = select * from :lt_sale_anl ;---WHERE LEVEL = I_COUNT -1 ;
+
+ if I_COUNT = 1 then
+    LT_OUT_TOTAL =  select * from :LT_OUT_TOTAL_TEMP;
+ else
+       LT_OUT_TOTAL = select * from :LT_OUT_TOTAL union select * from :LT_OUT_TOTAL_TEMP;
+ END if;
+
+lt_debug = select * from :lt_out_total order by ZSDDLVPOS_SALE;
+lt_debug_rn = select *,ROW_NUMBER() OVER (PARTITION BY "ZSDDLVPOS_SALE") as "NUM"  from :lt_debug;
+--   *** select count( * ) into I_COUNT from :lt_temp ;
+    I_COUNT = I_COUNT + 1;
+
+--   I_STOP = I_STOP - 1;
+SELECT count( * ) into I_STOP  from :lt_in_total_sales;
    END WHILE;
 
-    LT_OUT = select * from :LT_IN;
+--    LT_OUT_TOTAL = select * from :lt_sale_anl;
+lt_out_cost = select OPERTYPE,ZSDDLVPOS_SALE,
+                        ZMATBATCH,
+                        DTSHP_BACT,
+                        SHIP_POINT,SOLD_TO_SHIP,
+                        sum(DELIV_NUM_COUNT),
+                        sum(ZSD_TRFPC),
+                        sum(ZSDDLKGAG)
+                           from :LT_OUT_TOTAL group by
+                           OPERTYPE,ZSDDLVPOS_SALE,
+                        ZMATBATCH,
+                        DTSHP_BACT,
+                        SHIP_POINT,SOLD_TO_SHIP;
 
 
 ENDMETHOD.
